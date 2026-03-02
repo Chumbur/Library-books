@@ -255,6 +255,8 @@ const BOOKS: Book[] = [
 export default function App() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [hoveredBook, setHoveredBook] = useState<Book | null>(null);
+  const [expandedBookTitle, setExpandedBookTitle] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -358,7 +360,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0000FF] text-white font-sans selection:bg-white selection:text-[#0000FF] flex flex-col">
       {/* Header */}
-      <header className="px-6 py-12 md:px-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10 shrink-0">
+      <header className="px-6 py-8 md:px-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10 shrink-0">
         <motion.div
           initial={{ x: -50, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
@@ -388,9 +390,9 @@ export default function App() {
       </header>
 
       {/* Main Content - Horizontal Slider */}
-      <main className="flex-1 flex flex-col items-center w-full relative pb-20">
+      <main className="flex-1 flex flex-col items-center w-full relative pb-10">
         {/* Category Filters / Keywords */}
-        <div className="w-full px-6 md:px-12 py-12 z-20 flex flex-col items-center gap-4">
+        <div className="w-full px-6 md:px-12 py-8 z-20 flex flex-col items-center gap-4">
           <div className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40 mb-2">Filter by Category</div>
           <div 
             ref={tagsContainerRef}
@@ -424,46 +426,82 @@ export default function App() {
           onMouseLeave={handleMouseLeave}
           onMouseUp={handleMouseUp}
           onMouseMove={handleMouseMove}
-          className={`flex items-end gap-1 md:gap-4 w-full px-12 md:px-24 overflow-x-auto no-scrollbar select-none min-h-[550px] ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          className={`flex items-end gap-1.5 w-full px-12 md:px-24 overflow-x-auto no-scrollbar select-none min-h-[550px] ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          <div className="flex items-end gap-1 md:gap-6 pb-4 pointer-events-none min-w-max">
-            {filteredBooks.map((book, idx) => (
-              <motion.div
-                key={book.title}
-                initial={{ x: 1000, opacity: 0 }}
-                animate={{ 
-                  x: 0, 
-                  opacity: 1,
-                  rotate: book.spine.rotation || 0,
-                }}
-                whileHover={{ 
-                  scale: 1.15, 
-                  zIndex: 50,
-                  y: -20,
-                  transition: { duration: 0.2 }
-                }}
-                transition={{ 
-                  delay: idx * 0.05, 
-                  type: "spring", 
-                  stiffness: 70,
-                  damping: 15
-                }}
-                onClick={(e) => {
-                  // Prevent click if dragging
-                  if (isDragging) return;
-                  setSelectedBook(book);
-                }}
-                className="pointer-events-auto relative shadow-2xl origin-bottom flex-shrink-0"
-                style={{
-                  width: book.spine.w,
-                  height: book.spine.h,
-                  backgroundColor: book.spine.bg,
-                  color: book.spine.text,
-                }}
-              >
-                {/* Spine Content */}
-                <div className="absolute inset-0 flex flex-col items-center py-6 px-1">
+          <div className="flex items-end gap-1.5 pb-4 pointer-events-none min-w-max">
+              {filteredBooks.map((book, idx) => {
+                const isExpanded = expandedBookTitle === book.title;
+                return (
+                  <motion.div
+                    key={book.title}
+                    initial={{ x: 1000, opacity: 0 }}
+                    animate={{ 
+                      x: 0, 
+                      opacity: 1,
+                      width: isExpanded ? 380 : book.spine.w,
+                      rotate: book.spine.rotation || 0,
+                      zIndex: isExpanded ? 50 : 1
+                    }}
+                    transition={{ 
+                      x: { delay: idx * 0.05, type: "spring", stiffness: 70, damping: 15 },
+                      width: { duration: 0.8, ease: [0.23, 1, 0.32, 1] },
+                      zIndex: { duration: 0 }
+                    }}
+                    onMouseEnter={() => setHoveredBook(book)}
+                    onMouseLeave={() => setHoveredBook(null)}
+                    onClick={(e) => {
+                      if (isDragging) return;
+                      setExpandedBookTitle(isExpanded ? null : book.title);
+                    }}
+                    className="pointer-events-auto relative shadow-2xl origin-bottom flex-shrink-0 cursor-pointer overflow-hidden group"
+                    style={{
+                      height: book.spine.h,
+                      backgroundColor: book.spine.bg,
+                      color: book.spine.text,
+                    }}
+                  >
+                    {/* Cover Content (Visible when Expanded) */}
+                    <div 
+                      className={`absolute inset-0 transition-opacity duration-700 flex flex-col p-8 justify-between ${
+                        isExpanded ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">{book.class}</span>
+                        <h3 className="text-4xl font-unbounded font-black uppercase tracking-tighter leading-none">{book.title}</h3>
+                      </div>
+                      
+                      <div className="flex flex-col gap-6">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            console.log("View Book clicked for:", book.title);
+                            setSelectedBook(book);
+                          }}
+                          className="w-full py-4 border-2 border-current rounded-full font-unbounded font-black uppercase text-xs tracking-widest hover:bg-current hover:text-white transition-all active:scale-95 relative z-[100] pointer-events-auto"
+                        >
+                          View Book
+                        </button>
+
+                        <div className="flex justify-between items-end">
+                          <div className="flex flex-col">
+                            <span className="text-[8px] font-mono uppercase tracking-widest opacity-40">Author</span>
+                            <span className="text-sm font-unbounded font-bold uppercase tracking-tight">{book.author}</span>
+                          </div>
+                          <div className="text-[10px] font-mono font-bold border border-current px-2 py-1 rounded-full">
+                            2026
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Spine Content (Fades when Expanded) */}
+                    <div 
+                      className={`absolute inset-0 flex flex-col items-center py-6 px-1 transition-opacity duration-700 ${
+                        isExpanded ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'
+                      }`}
+                    >
                   <div className="flex-1 flex items-center justify-center w-full">
                     {book.spine.variant === 'bordered' ? (
                       <div className="flex flex-col items-center gap-4 h-full w-full py-4">
@@ -521,14 +559,60 @@ export default function App() {
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
                 <div className="absolute inset-0 shadow-[inset_-1px_0_5px_rgba(0,0,0,0.05)] pointer-events-none" />
               </motion.div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
           
           {filteredBooks.length === 0 && (
             <div className="w-full text-center py-20 opacity-60 font-mono text-sm uppercase tracking-[0.5em]">
               Archive Empty
             </div>
           )}
+        </div>
+
+        {/* Hover Info Section */}
+        <div className="w-full px-6 md:px-12 mt-12 h-32 flex items-center justify-center border-t border-white/10">
+          <AnimatePresence>
+            {(hoveredBook || (expandedBookTitle && BOOKS.find(b => b.title === expandedBookTitle))) ? (
+              <motion.div 
+                key={(hoveredBook || BOOKS.find(b => b.title === expandedBookTitle))?.title}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3 }}
+                className="grid grid-cols-1 md:grid-cols-3 gap-12 w-full max-w-7xl"
+              >
+                {(() => {
+                  const displayBook = hoveredBook || BOOKS.find(b => b.title === expandedBookTitle);
+                  if (!displayBook) return null;
+                  return (
+                    <>
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">Title</span>
+                        <span className="text-2xl md:text-3xl font-unbounded font-black uppercase tracking-tighter leading-none truncate">{displayBook.title}</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">Author</span>
+                        <span className="text-2xl md:text-3xl font-unbounded font-black uppercase tracking-tighter leading-none truncate">{displayBook.author}</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">Class</span>
+                        <span className="text-2xl md:text-3xl font-unbounded font-black uppercase tracking-tighter leading-none truncate">{displayBook.class}</span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </motion.div>
+            ) : (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.2 }}
+                className="text-[10px] font-mono uppercase tracking-[0.4em]"
+              >
+                Hover over a book to view archive details
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </main>
 
@@ -629,31 +713,6 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
-
-      {/* Footer */}
-      <footer className="px-6 py-20 md:px-12 border-t border-white/10 mt-40 flex flex-col md:flex-row justify-between gap-12 relative z-10">
-        <div className="max-w-xl">
-          <h4 className="text-2xl font-unbounded font-black uppercase mb-6">MAIAD ARCHIVE</h4>
-          <p className="text-xs font-mono leading-relaxed opacity-60 uppercase tracking-widest">
-            A RADICAL REPOSITORY FOR THE FUTURE OF DESIGN. 
-            BUILT ON THE INTERSECTION OF HUMAN INTUITION AND MACHINE INTELLIGENCE.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-20 text-[10px] font-mono uppercase tracking-[0.2em]">
-          <div className="space-y-4">
-            <p className="font-black opacity-100">COLLECTIONS</p>
-            <p className="opacity-60 hover:opacity-100 cursor-pointer transition-opacity">Brutalist</p>
-            <p className="opacity-60 hover:opacity-100 cursor-pointer transition-opacity">Generative</p>
-            <p className="opacity-60 hover:opacity-100 cursor-pointer transition-opacity">Speculative</p>
-          </div>
-          <div className="space-y-4">
-            <p className="font-black opacity-100">SYSTEM</p>
-            <p className="opacity-60 hover:opacity-100 cursor-pointer transition-opacity">Status</p>
-            <p className="opacity-60 hover:opacity-100 cursor-pointer transition-opacity">API</p>
-            <p className="opacity-60 hover:opacity-100 cursor-pointer transition-opacity">Legal</p>
-          </div>
-        </div>
-      </footer>
 
       {/* Global Styles */}
       <style dangerouslySetInnerHTML={{ __html: `
