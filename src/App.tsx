@@ -5,7 +5,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, X, Download, Search, Library, Sun } from 'lucide-react';
+import { BookOpen, X, Download, Search, Library, Sun, Info } from 'lucide-react';
+import Papa from 'papaparse';
+
+const CSV_URL = "https://raw.githubusercontent.com/Chumbur/Library-books/be446fca4204d8d35dc3fc1b1a470edf5d41ca2b/Copy%20of%20MAIAD%20-%20READING%20LIST%20-%202025-2026.csv";
 
 interface Book {
   title: string;
@@ -25,7 +28,7 @@ interface Book {
   };
 }
 
-const BOOKS: Book[] = [
+const INITIAL_BOOKS: Book[] = [
   {
     "title": "In AI we trust",
     "author": "Helga Nowotny",
@@ -253,6 +256,10 @@ const BOOKS: Book[] = [
 ];
 
 export default function App() {
+  const [books, setBooks] = useState<Book[]>(INITIAL_BOOKS);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [viewingPdf, setViewingPdf] = useState<string | null>(null);
+  const [isPdfLoading, setIsPdfLoading] = useState(true);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [hoveredBook, setHoveredBook] = useState<Book | null>(null);
@@ -268,9 +275,9 @@ export default function App() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tagsContainerRef = useRef<HTMLDivElement>(null);
 
-  const categories = Array.from(new Set(BOOKS.map(b => b.class))).sort();
+  const categories = Array.from(new Set(books.map(b => b.class))).sort();
 
-  const filteredBooks = BOOKS.filter(book => {
+  const filteredBooks = books.filter(book => {
     const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       book.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
       book.class.toLowerCase().includes(searchQuery.toLowerCase());
@@ -279,6 +286,75 @@ export default function App() {
     
     return matchesSearch && matchesCategory;
   });
+
+  const getSpineFontSize = (title: string, height: number, width: number, variant?: string) => {
+    const length = title.length;
+    let baseSize = variant === 'bordered' ? 13 : 20;
+    
+    // Ensure it fits the width
+    const maxWidth = width - 10;
+    if (baseSize > maxWidth) baseSize = maxWidth;
+
+    // Ensure it fits the height (roughly)
+    const availableHeight = height - (variant === 'bordered' ? 120 : 80);
+    const charHeight = availableHeight / length;
+    
+    return `${Math.min(baseSize, charHeight * 1.4)}px`;
+  };
+
+  const getCoverFontSize = (title: string) => {
+    const length = title.length;
+    if (length > 35) return 'text-xl';
+    if (length > 25) return 'text-2xl';
+    if (length > 15) return 'text-3xl';
+    return 'text-4xl';
+  };
+
+  // Fetch CSV data from GitHub
+  useEffect(() => {
+    const fetchBooks = async () => {
+      Papa.parse(CSV_URL, {
+        download: true,
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (results.data && results.data.length > 0) {
+            const csvBooks: Book[] = results.data.map((row: any, idx: number) => {
+              // Get the original spine style if available, otherwise use a default
+              const originalSpine = INITIAL_BOOKS[idx]?.spine || {
+                bg: "#FFFFFF",
+                text: "#0000FF",
+                w: 45,
+                h: 400,
+                font: "'Unbounded', sans-serif",
+                weight: 700
+              };
+
+              const pdfLink = row["PDF LINK"] || row.pdf || "";
+              const hasPdf = pdfLink && pdfLink !== "#" && !pdfLink.includes("your-pdf-link.com");
+
+              return {
+                title: row.TITLE || row.title || "Untitled",
+                author: row.AUTHOR || row.author || "Unknown",
+                class: row.CLASS || row.class || "General",
+                pdf: hasPdf ? pdfLink : "",
+                spine: originalSpine
+              };
+            });
+
+            // Replace the first N books with CSV data, keep the rest
+            const updatedBooks = [...csvBooks, ...INITIAL_BOOKS.slice(csvBooks.length)];
+            setBooks(updatedBooks);
+          }
+        },
+        error: (error) => {
+          console.error("Error parsing CSV:", error);
+        }
+      });
+    };
+
+    fetchBooks();
+  }, []);
 
   // Horizontal scroll with mouse wheel
   useEffect(() => {
@@ -376,16 +452,25 @@ export default function App() {
           initial={{ x: 50, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
-          className="relative w-full md:w-72"
+          className="flex items-center gap-4 w-full md:w-auto"
         >
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3 h-3 opacity-60" />
-          <input 
-            type="text"
-            placeholder="SEARCH ARCHIVE..."
-            className="w-full bg-white/10 border border-white/20 rounded-none py-3 pl-10 pr-6 text-[10px] font-mono focus:outline-none focus:bg-white/20 transition-all placeholder:text-white/40"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3 h-3 opacity-60" />
+            <input 
+              type="text"
+              placeholder="SEARCH ARCHIVE..."
+              className="w-full bg-white/10 border border-white/20 rounded-none py-3 pl-10 pr-6 text-[10px] font-mono focus:outline-none focus:bg-white/20 transition-all placeholder:text-white/40"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <button 
+            onClick={() => setIsAboutOpen(true)}
+            className="flex items-center gap-2 px-6 py-3 border border-white/20 hover:bg-white hover:text-[#0000FF] transition-all font-mono text-[10px] uppercase tracking-widest shrink-0"
+          >
+            <Info className="w-3 h-3" />
+            About
+          </button>
         </motion.div>
       </header>
 
@@ -469,19 +554,42 @@ export default function App() {
                     >
                       <div className="space-y-2">
                         <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">{book.class}</span>
-                        <h3 className="text-4xl font-unbounded font-black uppercase tracking-tighter leading-none">{book.title}</h3>
+                        <h3 className={`${getCoverFontSize(book.title)} font-unbounded font-black uppercase tracking-tighter leading-none`}>{book.title}</h3>
                       </div>
                       
                       <div className="flex flex-col gap-6">
+                        {(() => {
+                          const hasPdf = book.pdf && book.pdf !== "" && book.pdf !== "#";
+                          return (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (hasPdf) {
+                                  setViewingPdf(book.pdf);
+                                  setIsPdfLoading(true);
+                                }
+                              }}
+                              disabled={!hasPdf}
+                              className={`w-full py-4 border-2 border-current rounded-full font-unbounded font-black uppercase text-xs tracking-widest transition-all relative z-[100] pointer-events-auto flex items-center justify-center gap-2 ${
+                                hasPdf 
+                                  ? 'hover:bg-current hover:text-white active:scale-95 cursor-pointer' 
+                                  : 'opacity-50 cursor-not-allowed'
+                              }`}
+                            >
+                              <BookOpen className="w-4 h-4" />
+                              {hasPdf ? 'Read PDF' : 'No PDF Available'}
+                            </button>
+                          );
+                        })()}
+
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            console.log("View Book clicked for:", book.title);
                             setSelectedBook(book);
                           }}
-                          className="w-full py-4 border-2 border-current rounded-full font-unbounded font-black uppercase text-xs tracking-widest hover:bg-current hover:text-white transition-all active:scale-95 relative z-[100] pointer-events-auto"
+                          className="w-full py-2 text-[10px] font-mono uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity"
                         >
-                          View Book
+                          View Details
                         </button>
 
                         <div className="flex justify-between items-end">
@@ -506,7 +614,10 @@ export default function App() {
                     {book.spine.variant === 'bordered' ? (
                       <div className="flex flex-col items-center gap-4 h-full w-full py-4">
                         <div className="border-2 border-current rounded-full px-2 py-8 flex items-center justify-center">
-                          <span className="writing-vertical-rl uppercase font-black text-sm tracking-tighter whitespace-nowrap">
+                          <span 
+                            className="writing-vertical-rl uppercase font-black tracking-tighter whitespace-nowrap"
+                            style={{ fontSize: getSpineFontSize(book.title, book.spine.h, book.spine.w, 'bordered') }}
+                          >
                             {book.title}
                           </span>
                         </div>
@@ -514,7 +625,10 @@ export default function App() {
                           {book.spine.number}
                         </div>
                         <div className="border-2 border-current rounded-full px-2 py-4 flex items-center justify-center">
-                          <span className="writing-vertical-rl uppercase font-bold text-[8px] tracking-tighter whitespace-nowrap">
+                          <span 
+                            className="writing-vertical-rl uppercase font-bold tracking-tighter whitespace-nowrap"
+                            style={{ fontSize: `${Math.min(8, 60 / book.class.length)}px` }}
+                          >
                             {book.class}
                           </span>
                         </div>
@@ -522,7 +636,10 @@ export default function App() {
                     ) : book.spine.variant === 'icon' ? (
                       <div className="flex flex-col items-center justify-between h-full py-4">
                         <Sun className="w-6 h-6 fill-current" />
-                        <span className="writing-vertical-rl uppercase font-black text-xl tracking-tighter whitespace-nowrap">
+                        <span 
+                          className="writing-vertical-rl uppercase font-black tracking-tighter whitespace-nowrap"
+                          style={{ fontSize: getSpineFontSize(book.title, book.spine.h, book.spine.w) }}
+                        >
                           {book.title}
                         </span>
                         <Sun className="w-6 h-6 fill-current" />
@@ -534,14 +651,20 @@ export default function App() {
                           <span>Mini</span>
                           <span>Pastel</span>
                         </div>
-                        <span className="text-9xl font-black leading-none">{book.spine.number}</span>
+                        <span 
+                          className="font-black leading-none"
+                          style={{ fontSize: `${Math.min(120, book.spine.w * 0.85)}px` }}
+                        >
+                          {book.spine.number}
+                        </span>
                       </div>
                     ) : (
                       <span 
-                        className="writing-vertical-rl uppercase font-black text-xl tracking-tighter whitespace-nowrap px-2"
+                        className="writing-vertical-rl uppercase font-black tracking-tighter whitespace-nowrap px-2"
                         style={{ 
                           fontFamily: book.spine.font,
-                          fontWeight: book.spine.weight
+                          fontWeight: book.spine.weight,
+                          fontSize: getSpineFontSize(book.title, book.spine.h, book.spine.w)
                         }}
                       >
                         {book.title}
@@ -573,9 +696,9 @@ export default function App() {
         {/* Hover Info Section */}
         <div className="w-full px-6 md:px-12 mt-12 h-32 flex items-center justify-center border-t border-white/10">
           <AnimatePresence>
-            {(hoveredBook || (expandedBookTitle && BOOKS.find(b => b.title === expandedBookTitle))) ? (
+            {(hoveredBook || (expandedBookTitle && books.find(b => b.title === expandedBookTitle))) ? (
               <motion.div 
-                key={(hoveredBook || BOOKS.find(b => b.title === expandedBookTitle))?.title}
+                key={(hoveredBook || books.find(b => b.title === expandedBookTitle))?.title}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
@@ -583,7 +706,7 @@ export default function App() {
                 className="grid grid-cols-1 md:grid-cols-3 gap-12 w-full max-w-7xl"
               >
                 {(() => {
-                  const displayBook = hoveredBook || BOOKS.find(b => b.title === expandedBookTitle);
+                  const displayBook = hoveredBook || books.find(b => b.title === expandedBookTitle);
                   if (!displayBook) return null;
                   return (
                     <>
@@ -615,6 +738,76 @@ export default function App() {
           </AnimatePresence>
         </div>
       </main>
+
+      {/* About Side Panel */}
+      <AnimatePresence>
+        {isAboutOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAboutOpen(false)}
+              className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm cursor-crosshair"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 bottom-0 w-full md:w-1/2 bg-white text-[#0000FF] z-[160] shadow-2xl p-8 md:p-16 flex flex-col overflow-y-auto"
+            >
+              <button 
+                onClick={() => setIsAboutOpen(false)}
+                className="absolute top-8 right-8 p-3 bg-[#0000FF] text-white hover:bg-black transition-colors rounded-none flex items-center justify-center group"
+              >
+                <X className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300" />
+              </button>
+
+              <div className="mt-12 md:mt-24 max-w-xl">
+                <h2 className="text-4xl md:text-6xl font-unbounded font-black tracking-tighter uppercase leading-none mb-12">
+                  About<br />Archive
+                </h2>
+                
+                <div className="space-y-12">
+                  <p className="text-lg md:text-xl font-medium leading-relaxed">
+                    MAIAD Library is an interactive experiment for the Master in AI and Design program. 
+                    A curated digital shelf exploring the space between web, artificial intelligence, and design culture.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-12 pt-12 border-t border-[#0000FF]/10">
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">Authors</span>
+                      <p className="font-unbounded font-bold text-sm uppercase tracking-tight">
+                        Valeria Castillo Moreno<br />Irakli Chumburidze
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">Program</span>
+                      <p className="font-unbounded font-bold text-sm uppercase tracking-tight">
+                        Master in AI and Design — MAIAD
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">Focus</span>
+                      <p className="font-unbounded font-bold text-sm uppercase tracking-tight">
+                        Interactive experiments for Web and AI
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-[0.4em] opacity-40">Year</span>
+                      <p className="font-unbounded font-bold text-sm uppercase tracking-tight">
+                        2025 — ongoing
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Book Detail Modal */}
       <AnimatePresence>
@@ -688,15 +881,16 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                    <a 
-                      href={selectedBook.pdf}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button 
+                      onClick={() => {
+                        setViewingPdf(selectedBook.pdf);
+                        setIsPdfLoading(true);
+                      }}
                       className="flex items-center justify-center gap-3 bg-[#0000FF] text-white px-8 py-4 font-unbounded font-black text-xs uppercase hover:bg-black transition-colors"
                     >
                       <BookOpen className="w-4 h-4" />
                       ACCESS ARCHIVE
-                    </a>
+                    </button>
                     <button className="flex items-center justify-center gap-3 border-2 border-[#0000FF] px-8 py-4 font-unbounded font-black text-xs uppercase hover:bg-[#0000FF] hover:text-white transition-all">
                       <Download className="w-4 h-4" />
                       COLLECT
@@ -708,6 +902,79 @@ export default function App() {
                   <span>MAIAD DIGITAL ARCHIVE</span>
                   <span>© 2026</span>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* PDF Viewer Modal */}
+      <AnimatePresence>
+        {viewingPdf && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-0 md:p-12">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setViewingPdf(null)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md cursor-crosshair"
+            />
+            
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full h-full bg-white shadow-2xl flex flex-col z-[210] overflow-hidden"
+            >
+              {/* PDF Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[#0000FF]/10 bg-white">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 bg-[#0000FF] text-white">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#0000FF]">
+                    Digital Archive Viewer
+                  </span>
+                </div>
+                <button 
+                  onClick={() => setViewingPdf(null)}
+                  className="p-2 hover:bg-[#0000FF] hover:text-white transition-colors text-[#0000FF]"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* PDF Content */}
+              <div className="flex-1 bg-zinc-100 relative">
+                {isPdfLoading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white z-10">
+                    <div className="w-12 h-12 border-4 border-[#0000FF]/20 border-t-[#0000FF] rounded-full animate-spin" />
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#0000FF] animate-pulse">
+                      Loading Archive...
+                    </span>
+                  </div>
+                )}
+                <iframe 
+                  src={`https://docs.google.com/viewer?url=${encodeURIComponent(viewingPdf)}&embedded=true`}
+                  className="w-full h-full border-none"
+                  title="PDF Viewer"
+                  onLoad={() => setIsPdfLoading(false)}
+                />
+              </div>
+
+              {/* PDF Footer */}
+              <div className="px-6 py-3 border-t border-[#0000FF]/10 bg-white flex justify-between items-center">
+                <div className="text-[8px] font-mono uppercase tracking-widest opacity-40 text-[#0000FF]">
+                  MAIAD Library System v1.0
+                </div>
+                <a 
+                  href={viewingPdf}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[8px] font-mono uppercase tracking-widest text-[#0000FF] hover:underline"
+                >
+                  Open in new window
+                </a>
               </div>
             </motion.div>
           </div>
